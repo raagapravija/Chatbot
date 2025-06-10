@@ -1,45 +1,62 @@
-# app.py
-import streamlit as st
-from dotenv import load_dotenv
 import os
-from langchain_openai import ChatOpenAI
-from langchain.chains import ConversationChain
-from langchain.memory import ConversationBufferMemory
+import streamlit as st
+from langchain_community.llms import DeepInfra
+from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
-openai_api_key = os.getenv("OPENAI_API_KEY")
 
-# Initialize LangChain
-llm = ChatOpenAI(openai_api_key=openai_api_key, temperature=0.7)
-memory = ConversationBufferMemory()
-conversation = ConversationChain(llm=llm, memory=memory)
+# Set up the page
+st.set_page_config(page_title="Chatbot", page_icon="🤖")
+st.title("💬 AI Chatbot (Working Version)")
 
-# Page config
-st.set_page_config(page_title="🧠 Chat with LangChain", page_icon="🤖", layout="centered")
-st.markdown("<h1 style='text-align: center;'>💬 LangChain Chatbot</h1>", unsafe_allow_html=True)
-st.markdown("---")
+# Initialize the LLM with correct parameters
+@st.cache_resource
+def load_llm():
+    return DeepInfra(
+        model_id="mistralai/Mistral-7B-Instruct-v0.1",
+        model_kwargs={
+            "temperature": 0.7,
+            "max_new_tokens": 200,
+            "top_p": 0.9
+        }
+    )
 
-# Session state
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
+# Check API key
+if not os.getenv("DEEPINFRA_API_TOKEN"):
+    st.error("❌ Missing DeepInfra API key in .env file")
+    st.info("Get a free key from: https://deepinfra.com/")
+    st.stop()
+
+# Set API key as environment variable
+os.environ["DEEPINFRA_API_TOKEN"] = os.getenv("DEEPINFRA_API_TOKEN")
+
+# Initialize chat
+try:
+    llm = load_llm()
+    st.success("✅ Chatbot initialized successfully!")
+except Exception as e:
+    st.error(f"Initialization failed: {str(e)}")
+    st.stop()
+
+# Chat interface
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# Display history
+for msg in st.session_state.messages:
+    st.chat_message(msg["role"]).write(msg["content"])
 
 # User input
-user_input = st.text_input("Type your message here...", key="input")
-
-# When send button is clicked
-if st.button("Send", use_container_width=True):
-    if user_input:
-        # LangChain generates response
-        response = conversation.predict(input=user_input)
-
-        # Save to history
-        st.session_state.chat_history.append(("user", user_input))
-        st.session_state.chat_history.append(("bot", response))
-
-# Display chat bubbles
-for speaker, message in st.session_state.chat_history:
-    if speaker == "user":
-        st.markdown(f"<div style='background-color:#DCF8C6; padding:10px; border-radius:10px; margin-bottom:5px; text-align:right'>{message}</div>", unsafe_allow_html=True)
-    else:
-        st.markdown(f"<div style='background-color:#F1F0F0; padding:10px; border-radius:10px; margin-bottom:10px; text-align:left'>{message}</div>", unsafe_allow_html=True)
+if prompt := st.chat_input("Ask me anything"):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    st.chat_message("user").write(prompt)
+    
+    with st.chat_message("assistant"):
+        try:
+            response = llm.invoke(prompt)
+            st.write(response)
+            st.session_state.messages.append({"role": "assistant", "content": response})
+        except Exception as e:
+            st.error("⚠️ Error generating response")
+            st.info("Try a simpler question or wait a minute")
