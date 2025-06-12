@@ -1,83 +1,75 @@
-import os
 import streamlit as st
-from langchain_community.llms import DeepInfra
-from dotenv import load_dotenv
+import uuid
+from ui import setup_page_config, apply_custom_styles, display_header, display_message, history_sidebar
+from llm_utils import load_llm, initialize_chat_session
+from chat_utils import generate_response
+from config import APP_CONFIG
+from db_utils import init_db, save_message, get_session_messages, get_all_sessions
 
-# Load environment variables
-load_dotenv()
-
-# Set up the page
-st.set_page_config(page_title="Chatbot", page_icon="🤖")
-st.title("💬 Expert AI Assistant")
-
-# Initialize the LLM with optimized parameters
-@st.cache_resource
-def load_llm():
-    return DeepInfra(
-        model_id="mistralai/Mistral-7B-Instruct-v0.1",
-        model_kwargs={
-            "temperature": 0.5,  # Balanced between creative and factual
-            "max_new_tokens": 250,
-            "top_p": 0.85,
-            "repetition_penalty": 1.05,
-            "stop_sequences": ["\nUser:", "\nHuman:", "###"]
-        }
-    )
-
-# Check API key
-if not os.getenv("DEEPINFRA_API_TOKEN"):
-    st.error("❌ Missing DeepInfra API key")
-    st.stop()
-
-os.environ["DEEPINFRA_API_TOKEN"] = os.getenv("DEEPINFRA_API_TOKEN")
-
-# Enhanced response generation
-def generate_response(prompt, history):
-    context = "\n".join([f"{msg['role']}: {msg['content']}" for msg in history[-3:]])
+def main():
+    # Setup UI first
+    setup_page_config(APP_CONFIG)
+    apply_custom_styles()
+    display_header()
     
-    instruction = f"""You are a knowledgeable AI assistant. Provide clear, confident answers to technical questions.
-If a question is unclear, ask for clarification once. Otherwise, answer directly.
-
-Conversation context:
-{context}
-User: {prompt}
-Assistant:"""
+    # Initialize database
+    init_db()
     
-    try:
-        response = llm.invoke(instruction)
-        response = response.split("\n")[0].strip()
-        
-        # More permissive validation
-        if not response or response.startswith(("I don't know", "I'm not sure")):
-            return "Could you provide more details about what you're looking for?"
-        return response
-        
-    except Exception as e:
-        return "Let me try that again. " + prompt.split("?")[0] + "?"
-
-# Initialize chat
-try:
-    llm = load_llm()
-    if "messages" not in st.session_state:
-        st.session_state.messages = [{
+    # Initialize session state variables
+    if 'user_id' not in st.session_state:
+        st.session_state.user_id = str(uuid.uuid4())
+    
+    if 'session_id' not in st.session_state:
+        st.session_state.session_id = str(uuid.uuid4())
+    
+    if 'messages' not in st.session_state:
+        st.session_state.messages = get_session_messages(st.session_state.session_id) or [{
             "role": "assistant", 
-            "content": "I'm an AI technical assistant. Ask me about programming, AI, or data science!"
+            "content": "Hello! How can I help you today?"
         }]
-except Exception as e:
-    st.error(f"Initialization error: {str(e)}")
-    st.stop()
-
-# Display chat history
-for msg in st.session_state.messages:
-    st.chat_message(msg["role"]).write(msg["content"])
-
-# Handle user input
-if prompt := st.chat_input("Ask a technical question..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    st.chat_message("user").write(prompt)
     
-    with st.chat_message("assistant"):
-        with st.spinner("Processing..."):
-            response = generate_response(prompt, st.session_state.messages)
-            st.write(response)
-            st.session_state.messages.append({"role": "assistant", "content": response})
+    # Initialize LLM
+    try:
+        llm = load_llm()
+    except Exception as e:
+        st.error(f"LLM initialization error: {str(e)}")
+        st.stop()
+    
+    # Show history sidebar
+    history_sidebar()
+    
+    # Display chat history
+    for msg in st.session_state.messages:
+        display_message(msg["role"], msg["content"])
+    
+    # Handle user input
+    if prompt := st.chat_input("Ask me anything..."):
+        # Save and display user message
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        display_message("user", prompt)
+        save_message(
+            session_id=st.session_state.session_id,
+            user_id=st.session_state.user_id,
+            role="user",
+            content=prompt
+        )
+        
+        # Generate and save assistant response
+        with st.spinner("Thinking..."):
+            try:
+                response = generate_response(llm, prompt, st.session_state.messages)
+                st.session_state.messages.append({"role": "assistant", "content": response})
+                display_message("assistant", response)
+                save_message(
+                    session_id=st.session_state.session_id,
+                    user_id=st.session_state.user_id,
+                    role="assistant",
+                    content=response
+                )
+            except Exception as e:
+                error_msg = f"Sorry, I encountered an error: {str(e)}"
+                st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                display_message("assistant", error_msg)
+
+if __name__ == "__main__":
+    main()
