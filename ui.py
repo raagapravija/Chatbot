@@ -169,15 +169,16 @@ def history_sidebar():
 
         sessions = get_all_sessions(st.session_state.user_id)
 
-        # Highlight the current session
+        # Reverse sessions so most recent shows on top
+        sessions = list(reversed(sessions))
+
         current_session = st.session_state.session_id
 
-        for s in sessions:
+        for idx, s in enumerate(sessions):
             session_id = s["session_id"]
-            session_number = sessions.index(s) + 1
+            session_number = idx + 1
             is_current = session_id == current_session
 
-            # Display each session row
             cols = st.columns([0.8, 0.2])
             with cols[0]:
                 st.markdown(
@@ -202,3 +203,4 @@ def history_sidebar():
         st.markdown("---")
         if st.button(" New Chat", type="primary"):
             start_new_session()
+
