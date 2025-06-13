@@ -1,8 +1,10 @@
 import os
 from dotenv import load_dotenv
+import streamlit as st
 
 # Load environment variables
 load_dotenv()
+
 
 # LLM Configuration
 LLM_CONFIG = {
@@ -30,3 +32,9 @@ APP_CONFIG = {
     "layout": "wide",
     "initial_sidebar_state": "collapsed"
 }
+
+def set_streamlit_config():
+    st.set_page_config(
+        initial_sidebar_state="expanded",  # This makes sidebar open by default
+        layout="wide"
+    )

@@ -5,8 +5,12 @@ from llm_utils import load_llm, initialize_chat_session
 from chat_utils import generate_response
 from config import APP_CONFIG
 from db_utils import init_db, save_message, get_session_messages, get_all_sessions
+from config import set_streamlit_config
+
+
 
 def main():
+    
     # Setup UI first
     setup_page_config(APP_CONFIG)
     apply_custom_styles()
