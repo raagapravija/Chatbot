@@ -2,39 +2,24 @@ import os
 from dotenv import load_dotenv
 import streamlit as st
 
-# Load environment variables
 load_dotenv()
 
-
-# LLM Configuration
-LLM_CONFIG = {
-    "model_id": "mistralai/Mistral-7B-Instruct-v0.1",
-    "model_kwargs": {
-        "temperature": 0.6,
-        "max_new_tokens": 500,
-        "top_p": 0.9,
-        "repetition_penalty": 1.1,
-        "stop_sequences": ["\nUser:", "\nHuman:", "###"]
-    }
-}
-
-# API Configuration
-API_TOKEN = os.getenv("DEEPINFRA_API_TOKEN")
-if not API_TOKEN:
-    raise ValueError("❌ Missing DeepInfra API token")
-
-os.environ["DEEPINFRA_API_TOKEN"] = API_TOKEN
-
-# App Configuration
+# Configuration Constants
 APP_CONFIG = {
-    "page_title": "Mistral Chat",
+    "page_title": "AI Assistant",
     "page_icon": "✨",
     "layout": "wide",
-    "initial_sidebar_state": "collapsed"
+    "initial_sidebar_state": "expanded"
 }
 
+class Config:
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+    GROQ_MODEL = "mixtral-8x7b-32768"
+    ACTIVE_MODEL = "llama3-70b-8192"
+    
+    if not GROQ_API_KEY:
+        raise ValueError("❌ GROQ_API_KEY missing from .env")
+
 def set_streamlit_config():
-    st.set_page_config(
-        initial_sidebar_state="expanded",  # This makes sidebar open by default
-        layout="wide"
-    )
+    """Centralized Streamlit configuration"""
+    st.set_page_config(**APP_CONFIG)

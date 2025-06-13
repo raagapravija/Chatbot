@@ -1,9 +1,11 @@
 import streamlit as st
 import uuid
 from datetime import datetime
+from llm_utils import load_llm
 from db_utils import get_all_sessions, get_session_messages, delete_session, update_session_name, get_session_preview 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from config import set_streamlit_config
 
 def set_sidebar_default_expanded():
     st.markdown("""
@@ -14,39 +16,19 @@ def set_sidebar_default_expanded():
     </style>
     """, unsafe_allow_html=True)
 
+    
+
 def generate_session_name(messages):
-    """Generate a meaningful session name based on conversation content"""
-    try:
-        # Only consider the first few messages to generate the name
-        relevant_messages = messages[:4]
-        
-        # Extract user messages
-        user_messages = [msg['content'] for msg in relevant_messages if msg['role'] == 'user']
-        if not user_messages:
-            return "New Chat"
-        
-        # Create a prompt for generating the session name
-        prompt = ChatPromptTemplate.from_template(
-            """Based on the following conversation snippets, generate a concise (3-5 word) 
-            title that summarizes the main topic. Return ONLY the title, nothing else.
-
-            Conversation snippets:
-            {snippets}
-
-            Title:"""
-        )
-        
-        # Use a simple LLM chain to generate the name
-        chain = prompt | StrOutputParser()
-        name = chain.invoke({"snippets": "\n".join(user_messages[:3])})
-        
-        # Clean up the response
-        name = name.strip().replace('"', '').replace("'", "")
-        if not name or len(name) > 50:  # Fallback if name is empty or too long
-            return "New Chat"
-        return name
-    except Exception:
+    llm = load_llm()
+    user_messages = [msg['content'] for msg in messages[:3] if msg['role'] == 'user']
+    
+    if not user_messages:
         return "New Chat"
+    
+    prompt = f"Generate a 3-5 word title for: {user_messages[0]}"
+    response = llm.invoke(prompt).content
+    
+    return response.strip()[:50] or "New Chat"
 
 def load_session(session_id):
     """Load a specific chat session from database"""
@@ -69,10 +51,16 @@ def start_new_session():
     }]
     st.rerun()
 
-def setup_page_config(config):
-    config["initial_sidebar_state"] = "expanded"
-    st.set_page_config(**config)
-
+def setup_page_config(config=None):
+    """Compatibility wrapper that merges custom configs with defaults"""
+    from config import APP_CONFIG, set_streamlit_config
+    
+    # Merge custom config with defaults if provided
+    if config:
+        merged_config = {**APP_CONFIG, **config}
+        st.set_page_config(**merged_config)
+    else:
+        set_streamlit_config()  # Use defaults
 def apply_custom_styles():
     st.markdown("""
     <style>
@@ -346,25 +334,25 @@ def history_sidebar():
         """)
 
 def chat_interface():
-    """Main chat interface with automatic session naming"""
     if 'messages' not in st.session_state:
         st.session_state.messages = []
-
-    # Display chat messages
-    for message in st.session_state.messages:
-        display_message(message['role'], message['content'])
-
-    # After each message exchange, update the session name if it's still the default
-    if len(st.session_state.messages) >= 2 and 'session_id' in st.session_state:
-        sessions = get_all_sessions(st.session_state.user_id)
-        current_session = next((s for s in sessions if s["session_id"] == st.session_state.session_id), None)
+    
+    # Display existing messages
+    for msg in st.session_state.messages:
+        display_message(msg['role'], msg['content'])
+    
+    if prompt := st.chat_input("Message..."):
+        st.session_state.messages.append({"role": "user", "content": prompt})
         
-        if current_session and (not current_session.get("session_name") or 
-                              current_session["session_name"] == "New Chat"):
-            new_name = generate_session_name(st.session_state.messages)
-            if new_name != "New Chat":
-                update_session_name(st.session_state.session_id, new_name)
-                st.rerun()
+        with st.spinner("Thinking..."):
+            # Correct call with 2 arguments
+            response = generate_response(
+                prompt=prompt,
+                history=st.session_state.messages
+            )
+        
+        st.session_state.messages.append({"role": "assistant", "content": response})
+        st.rerun()
 
 def initialize_app(page_config):
     """Initialize the app with page config and session state"""

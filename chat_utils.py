@@ -1,16 +1,23 @@
-def generate_response(llm, prompt, history):
-    context = "\n".join([f"{msg['role']}: {msg['content']}" for msg in history[-5:]])
+from llm_utils import load_llm
+
+def generate_response(prompt, history):
+    """
+    Generates AI response using Groq via LangChain
+    Args:
+        prompt (str): Current user message
+        history (list): Conversation history in format [{"role": "user|assistant", "content": str}]
+    """
+    llm = load_llm()
     
-    instruction = f"""You are a knowledgable and helpful AI assistant. Provide clear, confident answers to technical questions and general questions.
-If a question is unclear, ask for clarification once. Otherwise, answer directly. Do not ask follow-up questions unless specifically requested.
-    
-Current conversation:
-{context}
-User: {prompt}
-Assistant:"""
+    # Format messages for LangChain
+    messages = [
+        {"role": msg["role"], "content": msg["content"]} 
+        for msg in history[-5:]  # Use last 5 messages for context
+    ]
+    messages.append({"role": "user", "content": prompt})
     
     try:
-        response = llm.invoke(instruction)
+        response = llm.invoke(messages).content
         return response.strip()
     except Exception as e:
-        return f"I encountered an error. Could you please repeat your question?"
+        return f"Sorry, I encountered an error: {str(e)}"
